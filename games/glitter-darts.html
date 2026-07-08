@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>GLITTER DARTS — ARCADE</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { height:100%; overflow:hidden; background:#04040a; touch-action:none;
+    font-family:'VT323',monospace; user-select:none; -webkit-user-select:none; }
+  #game { display:block; width:100%; height:100%; }
+
+  /* ---- CRT screen effect ---- */
+  #crt { position:fixed; inset:0; pointer-events:none; z-index:5;
+    background:
+      repeating-linear-gradient(0deg, rgba(0,0,0,.22) 0px, rgba(0,0,0,.22) 1px, transparent 2px, transparent 4px);
+    mix-blend-mode:multiply; }
+  #vignette { position:fixed; inset:0; pointer-events:none; z-index:6;
+    background:radial-gradient(ellipse at center, transparent 55%, rgba(0,0,10,.55) 100%);
+    animation:flicker 4s infinite; }
+  @keyframes flicker {
+    0%,100% { opacity:1; } 92% { opacity:1; } 93% { opacity:.86; } 94% { opacity:1; } 97% { opacity:.93; } 98% { opacity:1; }
+  }
+  @media (prefers-reduced-motion: reduce) { #vignette { animation:none; } .blink { animation:none !important; } #ov-title { animation:none !important; } }
+
+  /* ---- HUD ---- */
+  .hud { position:fixed; top:0; left:0; right:0; z-index:4;
+    padding:calc(12px + env(safe-area-inset-top)) 16px 0;
+    display:flex; justify-content:space-between; align-items:flex-start; pointer-events:none; }
+  .hud .label { font-family:'Press Start 2P',monospace; font-size:8px; letter-spacing:.1em;
+    color:#22e6ff; text-shadow:0 0 6px rgba(34,230,255,.8); margin-bottom:6px; }
+  .hud .value { font-family:'Press Start 2P',monospace; font-size:16px;
+    color:#fff; text-shadow:0 0 8px rgba(255,45,149,.9), 0 0 2px #fff; }
+  #level-box { text-align:center; }
+  #score-box { text-align:right; }
+  #score-box .value { color:#ffe94a; text-shadow:0 0 8px rgba(255,233,74,.9); }
+
+  /* ---- Overlay ---- */
+  #overlay { position:fixed; inset:0; z-index:10; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; background:rgba(2,2,10,.88); color:#fff; text-align:center; padding:24px;
+    opacity:0; pointer-events:none; transition:opacity .3s ease; }
+  #overlay.show { opacity:1; pointer-events:auto; }
+  #ov-title { font-family:'Press Start 2P',monospace; font-size:26px; line-height:1.5; margin-bottom:14px;
+    color:#ff2d95; text-shadow:0 0 14px #ff2d95, 0 0 40px rgba(255,45,149,.6), 3px 3px 0 #33003a;
+    animation:neon 2.4s infinite; }
+  @keyframes neon {
+    0%,100% { text-shadow:0 0 14px #ff2d95, 0 0 40px rgba(255,45,149,.6), 3px 3px 0 #33003a; }
+    50% { text-shadow:0 0 22px #ff2d95, 0 0 60px rgba(255,45,149,.9), 3px 3px 0 #33003a; }
+  }
+  #ov-sub { font-family:'Press Start 2P',monospace; font-size:9px; line-height:2;
+    color:#22e6ff; text-shadow:0 0 6px rgba(34,230,255,.8); margin-bottom:20px; max-width:320px; }
+  #ov-stats { font-family:'Press Start 2P',monospace; font-size:11px; line-height:2.2;
+    color:#ffe94a; text-shadow:0 0 8px rgba(255,233,74,.8); margin-bottom:22px; }
+  #ov-stats:empty { display:none; }
+  .arcade-btn { font-family:'Press Start 2P',monospace; font-size:12px;
+    color:#04040a; background:#ffe94a; border:none; border-radius:4px; padding:16px 34px; cursor:pointer;
+    box-shadow:0 0 18px rgba(255,233,74,.7), 0 5px 0 #a68f00; }
+  .arcade-btn:active { transform:translateY(4px); box-shadow:0 0 18px rgba(255,233,74,.7), 0 1px 0 #a68f00; }
+  #coin-line { font-family:'Press Start 2P',monospace; font-size:10px; color:#fff; margin-top:24px;
+    text-shadow:0 0 8px rgba(255,255,255,.6); }
+  .blink { animation:blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity:0; } }
+
+  #toast { position:fixed; left:50%; top:40%; transform:translate(-50%,-50%); pointer-events:none; z-index:8;
+    font-family:'Press Start 2P',monospace; font-size:15px; color:#ffe94a; text-align:center; line-height:1.8;
+    text-shadow:0 0 12px rgba(255,233,74,.9), 2px 2px 0 #4a3a00; opacity:0; transition:opacity .2s, transform .45s; }
+  #toast.show { opacity:1; transform:translate(-50%,-75%); }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="crt"></div>
+<div id="vignette"></div>
+
+<div class="hud">
+  <div id="darts-box"><div class="label">DARTS</div><div class="value" id="darts">5</div></div>
+  <div id="level-box"><div class="label">LEVEL</div><div class="value" id="level">1</div></div>
+  <div id="score-box"><div class="label">SCORE</div><div class="value" id="score">000000</div></div>
+</div>
+
+<div id="toast"></div>
+
+<div id="overlay" class="show">
+  <h1 id="ov-title">GLITTER<br>DARTS</h1>
+  <div id="ov-sub">TAP TO THROW WHEN THE SPARKLE SWEEPS THE BOARD 🎯<br>BULLSEYE ✨ = 50<br>HIT THE TARGET SCORE BEFORE YOUR 5 DARTS RUN OUT<br>ENDLESS LEVELS &middot; EVER HARDER</div>
+  <div id="ov-stats"></div>
+  <button class="arcade-btn" id="ov-btn">INSERT COIN</button>
+  <div id="coin-line" class="blink">TAP TO PLAY</div>
+</div>
+
+<script>
+(() => {
+"use strict";
+
+// ---- canvas + core ----
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const overlay = document.getElementById('overlay');
+const $ovTitle = document.getElementById('ov-title');
+const $ovSub = document.getElementById('ov-sub');
+const $ovStats = document.getElementById('ov-stats');
+const $ovBtn = document.getElementById('ov-btn');
+const $toast = document.getElementById('toast');
+const $darts = document.getElementById('darts');
+const $level = document.getElementById('level');
+const $score = document.getElementById('score');
+
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = W * DPR; canvas.height = H * DPR;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ---- chiptune audio ----
+let AC = null;
+function beep(freq, dur, type, vol) {
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    if (AC.state === 'suspended') AC.resume();
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(vol, AC.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime + dur);
+    o.connect(g); g.connect(AC.destination);
+    o.start(); o.stop(AC.currentTime + dur);
+  } catch(e) {}
+}
+const sndFail = () => { [220,180,140,100].forEach((f,i)=>setTimeout(()=>beep(f,.14,'square',.12), i*110)); };
+const sndClear = () => { [523,659,784].forEach((f,i)=>setTimeout(()=>beep(f,.12,'square',.1), i*100)); };
+const sndThrow = () => { beep(520, .05, 'square', .07); setTimeout(()=>beep(760,.04,'square',.05), 40); };
+const sndStick = () => { beep(180, .06, 'square', .12); beep(880, .05, 'square', .05); };
+const sndBull  = () => { [880,1175,1568].forEach((f,i)=>setTimeout(()=>beep(f,.1,'square',.1), i*70)); };
+const sndMiss  = () => { beep(150, .12, 'square', .09); };
+
+const NEON_PINK = '#ff2d95', NEON_CYAN = '#22e6ff', NEON_YELLOW = '#ffe94a';
+
+// ---- particles ----
+let particles = [];
+function burst(x, y, color) {
+  const cols = [color, NEON_CYAN, NEON_YELLOW, '#fff'];
+  for (let i = 0; i < 18; i++) {
+    const a = Math.random() * Math.PI * 2, sp = 60 + Math.random() * 240;
+    particles.push({ x, y, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp - 60,
+      life: .5 + Math.random()*.5, size: 3 + Math.floor(Math.random()*4),
+      color: cols[Math.floor(Math.random()*cols.length)] });
+  }
+}
+function drawParticles(dt) {
+  particles = particles.filter(p => (p.life -= dt) > 0);
+  for (const p of particles) {
+    p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 320 * dt;
+    ctx.globalAlpha = Math.min(1, p.life / .5);
+    ctx.fillStyle = p.color;
+    ctx.fillRect(Math.round(p.x), Math.round(p.y), p.size, p.size);
+    ctx.globalAlpha = 1;
+  }
+}
+
+// ---- fireworks ----
+let rockets = [], sparks = [];
+function sndWhoosh() {
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    if (AC.state === 'suspended') AC.resume();
+    const t = AC.currentTime;
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = 'sawtooth';
+    o.frequency.setValueAtTime(160, t);
+    o.frequency.exponentialRampToValueAtTime(950, t + .5);
+    g.gain.setValueAtTime(.05, t);
+    g.gain.exponentialRampToValueAtTime(.0001, t + .55);
+    o.connect(g); g.connect(AC.destination);
+    o.start(); o.stop(t + .55);
+  } catch(e) {}
+}
+function sndBoom() {
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    if (AC.state === 'suspended') AC.resume();
+    const t = AC.currentTime;
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(120, t);
+    o.frequency.exponentialRampToValueAtTime(40, t + .5);
+    g.gain.setValueAtTime(.3, t);
+    g.gain.exponentialRampToValueAtTime(.0001, t + .6);
+    o.connect(g); g.connect(AC.destination);
+    o.start(); o.stop(t + .6);
+    const len = Math.floor(AC.sampleRate * .35);
+    const buf = AC.createBuffer(1, len, AC.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2);
+    const src = AC.createBufferSource(); src.buffer = buf;
+    const ng = AC.createGain(); ng.gain.value = .18;
+    src.connect(ng); ng.connect(AC.destination);
+    src.start();
+  } catch(e) {}
+}
+function launchFirework() {
+  rockets.push({
+    x: W * (0.15 + Math.random() * 0.7),
+    y: H + 10,
+    vy: -(H * 1.05 + Math.random() * H * 0.3),
+    targetY: H * (0.14 + Math.random() * 0.28),
+    hue: Math.floor(Math.random() * 360),
+    trail: 0,
+  });
+  sndWhoosh();
+}
+function updateFireworks(dt) {
+  for (const r of rockets) {
+    r.y += r.vy * dt;
+    r.trail -= dt;
+    if (r.trail <= 0) {
+      sparks.push({ x: r.x + (Math.random()-.5)*3, y: r.y, vx: 0, vy: 60,
+        life: .3, size: 2, hue: r.hue, white: true });
+      r.trail = .016;
+    }
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(r.x - 1.5, r.y - 4, 3, 8);
+  }
+  const exploded = rockets.filter(r => r.y <= r.targetY);
+  rockets = rockets.filter(r => r.y > r.targetY);
+  for (const r of exploded) {
+    sndBoom();
+    const n = 48;
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * Math.PI * 2 + (Math.random()-.5) * .2;
+      const sp = 90 + Math.random() * 230;
+      sparks.push({ x: r.x, y: r.y,
+        vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        life: 1 + Math.random() * .8, size: 2 + Math.floor(Math.random()*3),
+        hue: r.hue + (Math.random()-.5) * 40, white: Math.random() < .18 });
+    }
+  }
+  sparks = sparks.filter(s => (s.life -= dt) > 0);
+  for (const s of sparks) {
+    s.x += s.vx * dt; s.y += s.vy * dt;
+    s.vy += 220 * dt;
+    s.vx *= Math.max(0, 1 - 1.1 * dt);
+    const tw = s.white ? 1 : .55 + .45 * Math.sin(s.life * 28);
+    ctx.globalAlpha = Math.min(1, s.life) * tw;
+    ctx.fillStyle = s.white ? '#fff' : `hsl(${s.hue}, 100%, 65%)`;
+    ctx.fillRect(s.x, s.y, s.size, s.size);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ---- background ----
+function drawArcadeBG(time) {
+  ctx.fillStyle = '#04040a';
+  ctx.fillRect(0, 0, W, H);
+  const horizon = H * 0.55;
+  ctx.strokeStyle = 'rgba(255,45,149,.14)';
+  ctx.lineWidth = 1;
+  const scroll = (time * 40) % 40;
+  for (let i = 0; i < 14; i++) {
+    const p = (i * 40 + scroll) / (14 * 40);
+    const y = horizon + Math.pow(p, 2.2) * (H - horizon);
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
+  for (let i = -8; i <= 8; i++) {
+    ctx.beginPath();
+    ctx.moveTo(W/2 + i * W * 0.09, horizon);
+    ctx.lineTo(W/2 + i * W * 0.35, H);
+    ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(34,230,255,.5)';
+  for (let i = 0; i < 24; i++) {
+    const x = ((i * 137.5) % W);
+    const y = ((i * 89.3) % horizon);
+    const tw = (Math.sin(time * 2 + i) + 1) / 2;
+    ctx.globalAlpha = 0.15 + tw * 0.4;
+    ctx.fillRect(x, y, 2, 2);
+  }
+  ctx.globalAlpha = 1;
+}
+
+function toast(msg) {
+  if (!msg) return;
+  $toast.innerHTML = String(msg).replace('\n', '<br>');
+  $toast.classList.add('show');
+  setTimeout(() => $toast.classList.remove('show'), 1000);
+}
+
+let epoch = 0;
+function later(fn, ms) {
+  const e = epoch;
+  setTimeout(() => { if (e === epoch) fn(); }, ms);
+}
+
+// ============================================================
+//  GLITTER DARTS
+// ============================================================
+const S = { MENU:0, PLAY:1, THROW:2, LEVELUP:3, DEAD:4 };
+const RINGS = [
+  { f:0.15, pts:50, col:NEON_YELLOW },
+  { f:0.36, pts:30, col:NEON_PINK },
+  { f:0.60, pts:20, col:'#b44dff' },
+  { f:0.82, pts:10, col:NEON_CYAN },
+  { f:1.00, pts:5,  col:'#ff7ab8' },
+];
+let state = S.MENU, level = 1, score = 0, best = 0, dartsLeft, needLeft, needTotal;
+let dart = null, stuck = [], misses = [], floats = [], aimP1 = 0, aimP2 = 0, shake = 0, flash = 0;
+let time = 0;
+
+// difficulty curve: faster aim, shrinking board, then the board starts to drift
+function cfg() {
+  return {
+    darts: 5,
+    need: Math.min(40 + (level - 1) * 15, 180),
+    spd: Math.min(1 + (level - 1) * 0.22, 3.2),
+    scale: 1 - Math.min(0.30, (level - 1) * 0.035),
+    driftAX: level >= 3 ? Math.min(70, (level - 2) * 14) : 0,
+    driftAY: level >= 6 ? Math.min(34, (level - 5) * 8) : 0,
+    driftS: 0.8 + level * 0.08,
+  };
+}
+function boardGeom() {
+  const c = cfg();
+  const base = Math.min(W * 0.36, H * 0.20, 150);
+  return {
+    cx: W/2 + Math.sin(time * c.driftS) * c.driftAX,
+    cy: H * 0.30 + Math.cos(time * c.driftS * 0.9) * c.driftAY,
+    R: Math.max(56, base * c.scale),
+  };
+}
+// reticle sweeps a lissajous path slightly wider than the board
+function aimPos(g) {
+  const c = cfg();
+  return {
+    x: g.cx + Math.sin(time * 1.9 * c.spd + aimP1) * g.R * 1.25,
+    y: g.cy + Math.sin(time * 2.6 * c.spd + aimP2) * g.R * 1.05,
+  };
+}
+
+function setupLevel() {
+  const c = cfg();
+  stuck = []; dart = null;
+  dartsLeft = c.darts;
+  needTotal = needLeft = c.need;
+  aimP1 = Math.random() * Math.PI * 2;
+  aimP2 = Math.random() * Math.PI * 2;
+  updateHUD();
+}
+function updateHUD() {
+  $darts.textContent = dartsLeft;
+  $level.textContent = level;
+  $score.textContent = String(score).padStart(6, '0');
+}
+
+function startGame() {
+  epoch++;
+  level = 1; score = 0;
+  particles = []; rockets = []; sparks = [];
+  misses = []; floats = []; shake = 0; flash = 0;
+  setupLevel();
+  state = S.PLAY;
+  overlay.classList.remove('show');
+}
+
+function drawDart(x, y, ang, s, glow, alpha) {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(ang || 0);
+  ctx.scale(s, s);
+  if (alpha !== undefined) ctx.globalAlpha = alpha;
+  if (glow) { ctx.shadowColor = NEON_PINK; ctx.shadowBlur = 12; }
+  ctx.fillStyle = '#e8e8ff';
+  ctx.beginPath();
+  ctx.moveTo(0, 0); ctx.lineTo(-3, 9); ctx.lineTo(3, 9);
+  ctx.closePath(); ctx.fill();
+  const grd = ctx.createLinearGradient(-3, 0, 3, 0);
+  grd.addColorStop(0, '#ff7ab8'); grd.addColorStop(.5, NEON_PINK); grd.addColorStop(1, '#c2185b');
+  ctx.fillStyle = grd;
+  ctx.fillRect(-3, 9, 6, 24);
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = NEON_CYAN;
+  ctx.fillRect(-3, 19, 6, 3);
+  ctx.fillStyle = NEON_YELLOW;
+  ctx.beginPath();
+  ctx.moveTo(-2, 33); ctx.lineTo(-9, 45); ctx.lineTo(-2, 42); ctx.closePath(); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(2, 33); ctx.lineTo(9, 45); ctx.lineTo(2, 42); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(-1, 33, 2, 10);
+  ctx.restore();
+}
+
+function drawBoard(g) {
+  const sx = (Math.random()-.5) * shake, sy = (Math.random()-.5) * shake;
+  ctx.save();
+  ctx.translate(g.cx + sx, g.cy + sy);
+  ctx.beginPath(); ctx.arc(0, 0, g.R * 1.32, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(255,45,149,.05)'; ctx.fill();
+  for (let i = RINGS.length - 1; i >= 0; i--) {
+    const r = RINGS[i];
+    ctx.beginPath(); ctx.arc(0, 0, g.R * r.f, 0, Math.PI * 2);
+    ctx.fillStyle = i % 2 ? '#0d0b1e' : '#1a0f2e';
+    ctx.fill();
+    ctx.strokeStyle = r.col;
+    ctx.lineWidth = i === RINGS.length - 1 ? 4 : 2;
+    if (i === RINGS.length - 1) { ctx.shadowColor = r.col; ctx.shadowBlur = 18; }
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+  ctx.strokeStyle = 'rgba(34,230,255,.25)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i < 12; i++) {
+    const a = i * Math.PI / 6;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a) * g.R * 0.15, Math.sin(a) * g.R * 0.15);
+    ctx.lineTo(Math.cos(a) * g.R, Math.sin(a) * g.R);
+    ctx.stroke();
+  }
+  ctx.font = `7px 'Press Start 2P', monospace`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  for (let i = 1; i < RINGS.length; i++) {
+    const mid = (RINGS[i-1].f + RINGS[i].f) / 2;
+    ctx.fillStyle = RINGS[i].col;
+    ctx.fillText(RINGS[i].pts, 0, -g.R * mid);
+  }
+  ctx.font = `${Math.round(g.R * 0.16)}px serif`;
+  ctx.fillText('✨', 0, 1);
+  ctx.restore();
+
+  if (state === S.PLAY || state === S.THROW) {
+    const y = g.cy + g.R + 30;
+    ctx.font = `10px 'Press Start 2P', monospace`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = NEON_CYAN; ctx.shadowColor = NEON_CYAN; ctx.shadowBlur = 8;
+    ctx.fillText('NEED ' + needLeft, g.cx, y);
+    ctx.shadowBlur = 0;
+    const bw = g.R * 1.6;
+    ctx.fillStyle = 'rgba(34,230,255,.15)';
+    ctx.fillRect(g.cx - bw/2, y + 10, bw, 6);
+    ctx.fillStyle = NEON_YELLOW;
+    ctx.fillRect(g.cx - bw/2, y + 10, bw * (1 - needLeft / needTotal), 6);
+  }
+}
+
+function drawAim(a) {
+  const p = 3 + Math.sin(time * 6) * 1.5;
+  ctx.save();
+  ctx.translate(a.x, a.y);
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
+  ctx.shadowColor = NEON_CYAN; ctx.shadowBlur = 10;
+  ctx.beginPath(); ctx.arc(0, 0, 12 + p, 0, Math.PI*2); ctx.stroke();
+  ctx.rotate(time * 2);
+  for (let i = 0; i < 4; i++) {
+    ctx.rotate(Math.PI / 2);
+    ctx.beginPath(); ctx.moveTo(0, 16 + p); ctx.lineTo(0, 22 + p); ctx.stroke();
+  }
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = NEON_PINK;
+  ctx.fillRect(-2, -2, 4, 4);
+  ctx.restore();
+}
+
+function throwDart() {
+  if (state !== S.PLAY || dartsLeft <= 0) return;
+  const a = aimPos(boardGeom());
+  const sx = W/2, sy = H * 0.88;
+  dart = { sx, sy, tx: a.x, ty: a.y, t: 0,
+    dur: 0.14 + Math.hypot(a.x - sx, a.y - sy) / 2800 };
+  state = S.THROW;
+  sndThrow();
+}
+
+function land(g) {
+  const d = Math.hypot(dart.tx - g.cx, dart.ty - g.cy) / g.R;
+  let ring = null;
+  for (const r of RINGS) if (d <= r.f) { ring = r; break; }
+  dartsLeft--;
+  if (ring) {
+    score += ring.pts;
+    needLeft = Math.max(0, needLeft - ring.pts);
+    stuck.push({ dx: dart.tx - g.cx, dy: dart.ty - g.cy, ang: (Math.random()-.5)*.24 });
+    shake = 6;
+    if (ring.pts === 50) {
+      sndBull();
+      burst(dart.tx, dart.ty, NEON_YELLOW); burst(dart.tx, dart.ty, NEON_PINK);
+      toast('BULLSEYE! +50');
+    } else {
+      sndStick();
+      floats.push({ x: dart.tx, y: dart.ty - 16, txt: '+' + ring.pts, life: .8, col: ring.col });
+    }
+  } else {
+    sndMiss();
+    misses.push({ x: dart.tx, y: dart.ty, vy: -120, vr: (Math.random()-.5)*10, r: 0 });
+    floats.push({ x: dart.tx, y: dart.ty - 16, txt: 'MISS', life: .8, col: '#ff3355' });
+  }
+  dart = null;
+  updateHUD();
+  if (needLeft <= 0) levelClear();
+  else if (dartsLeft <= 0) die();
+  else state = S.PLAY;
+}
+
+function levelClear() {
+  const bonus = dartsLeft * 5;
+  score += bonus;
+  best = Math.max(best, score);
+  updateHUD();
+  state = S.LEVELUP; sndClear();
+  const g = boardGeom();
+  burst(g.cx, g.cy, NEON_PINK); burst(g.cx, g.cy, NEON_YELLOW);
+  toast(bonus > 0 ? `LEVEL ${level} CLEAR!\nDART BONUS +${bonus}` : `LEVEL ${level} CLEAR!`);
+  if (level % 5 === 0) for (let k = 0; k < 4; k++) later(() => launchFirework(), k * 300);
+  later(() => {
+    level++;
+    setupLevel();
+    state = S.PLAY;
+    toast(level === 2 ? 'FASTER AIM!' : level === 3 ? 'THE BOARD DRIFTS!'
+      : level === 6 ? 'DOUBLE DRIFT!' : 'LEVEL ' + level);
+  }, 1500);
+}
+
+function showEnd(title, sub, btn) {
+  $ovTitle.innerHTML = title;
+  $ovSub.innerHTML = sub;
+  $ovStats.innerHTML = `SCORE ${String(score).padStart(6,'0')}<br>HI&nbsp;&nbsp;&nbsp; ${String(best).padStart(6,'0')}<br>LEVEL ${level}`;
+  $ovBtn.textContent = btn;
+  overlay.classList.add('show');
+}
+
+function die() {
+  state = S.DEAD; sndFail(); flash = 1;
+  best = Math.max(best, score);
+  later(() => showEnd('GAME OVER', 'OUT OF DARTS!', 'CONTINUE?'), 900);
+}
+
+// ---- main loop ----
+let lastT = 0;
+function frame(t) {
+  requestAnimationFrame(frame);
+  const dt = Math.min((t - lastT) / 1000 || 0, 0.033);
+  lastT = t;
+  time += dt;
+  shake = Math.max(0, shake - dt * 40);
+  flash = Math.max(0, flash - dt * 3);
+
+  drawArcadeBG(time);
+
+  if (state !== S.MENU) {
+    const g = boardGeom();
+    drawBoard(g);
+
+    for (const s of stuck) drawDart(g.cx + s.dx, g.cy + s.dy, s.ang, 0.8, false);
+
+    misses = misses.filter(m => m.y < H + 80);
+    for (const m of misses) {
+      m.vy += 1500 * dt; m.y += m.vy * dt; m.r += m.vr * dt;
+      drawDart(m.x, m.y, m.r, 0.9, false, .8);
+    }
+
+    if (state === S.THROW && dart) {
+      dart.t += dt / dart.dur;
+      if (dart.t >= 1) {
+        land(g);
+      } else {
+        const e = dart.t;
+        const x = dart.sx + (dart.tx - dart.sx) * e;
+        const y = dart.sy + (dart.ty - dart.sy) * e;
+        const ang = Math.atan2(dart.tx - dart.sx, dart.sy - dart.ty);
+        drawDart(x, y, ang, 1.4 - e * 0.5, true);
+      }
+    }
+
+    if (state === S.PLAY) {
+      drawAim(aimPos(g));
+      const bob = Math.sin(time * 3) * 4;
+      drawDart(W/2, H * 0.88 + bob, 0, 1.5, true);
+      ctx.fillStyle = NEON_CYAN;
+      for (let i = 0; i < dartsLeft - 1; i++)
+        ctx.fillRect(W/2 - ((dartsLeft-2)*10)/2 + i*10 - 2, H*0.88 + 78, 5, 5);
+    }
+
+    floats = floats.filter(f => (f.life -= dt) > 0);
+    ctx.font = `10px 'Press Start 2P', monospace`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const f of floats) {
+      f.y -= 46 * dt;
+      ctx.globalAlpha = Math.min(1, f.life / .4);
+      ctx.fillStyle = f.col;
+      ctx.shadowColor = f.col; ctx.shadowBlur = 8;
+      ctx.fillText(f.txt, f.x, f.y);
+      ctx.shadowBlur = 0;
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  drawParticles(dt);
+  updateFireworks(dt);
+
+  if (flash > 0) {
+    ctx.fillStyle = `rgba(255,51,85,${flash * .35})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  if (state === S.PLAY) {
+    ctx.font = `9px 'Press Start 2P', monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = (Math.floor(time * 2) % 2) ? 'rgba(34,230,255,.7)' : 'rgba(34,230,255,.25)';
+    ctx.fillText('TAP TO THROW', W/2, H - 24);
+  }
+}
+requestAnimationFrame(frame);
+
+// ---- input ----
+canvas.addEventListener('pointerdown', e => {
+  if (overlay.classList.contains('show')) return;
+  e.preventDefault();
+  throwDart();
+});
+window.addEventListener('keydown', e => {
+  if (e.code === 'Space' && !overlay.classList.contains('show')) throwDart();
+});
+$ovBtn.addEventListener('click', startGame);
+
+})();
+</script>
+</body>
+</html>
