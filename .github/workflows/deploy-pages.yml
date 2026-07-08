@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main, claude/arcade-github-pages-qyobmw]
+    branches: [main, claude/arcade-github-pages-qyobmw, claude/bejeweled-game-animations-u7bwu4]
   workflow_dispatch:
 
 permissions:
