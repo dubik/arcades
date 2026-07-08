@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>NAIL POLISH STACK — ARCADE</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { height:100%; overflow:hidden; background:#04040a; touch-action:none;
+    font-family:'VT323',monospace; user-select:none; -webkit-user-select:none; }
+  #game { display:block; width:100%; height:100%; }
+
+  #crt { position:fixed; inset:0; pointer-events:none; z-index:5;
+    background:repeating-linear-gradient(0deg, rgba(0,0,0,.22) 0px, rgba(0,0,0,.22) 1px, transparent 2px, transparent 4px);
+    mix-blend-mode:multiply; }
+  #vignette { position:fixed; inset:0; pointer-events:none; z-index:6;
+    background:radial-gradient(ellipse at center, transparent 55%, rgba(0,0,10,.55) 100%);
+    animation:flicker 4s infinite; }
+  @keyframes flicker {
+    0%,100% { opacity:1; } 92% { opacity:1; } 93% { opacity:.86; } 94% { opacity:1; } 97% { opacity:.93; } 98% { opacity:1; }
+  }
+  @media (prefers-reduced-motion: reduce) { #vignette { animation:none; } .blink { animation:none !important; } #ov-title { animation:none !important; } }
+
+  .hud { position:fixed; top:0; left:0; right:0; z-index:4;
+    padding:calc(12px + env(safe-area-inset-top)) 16px 0;
+    display:flex; justify-content:space-between; align-items:flex-start; pointer-events:none; }
+  .hud .label { font-family:'Press Start 2P',monospace; font-size:8px; letter-spacing:.1em;
+    color:#22e6ff; text-shadow:0 0 6px rgba(34,230,255,.8); margin-bottom:6px; }
+  .hud .value { font-family:'Press Start 2P',monospace; font-size:16px;
+    color:#fff; text-shadow:0 0 8px rgba(255,45,149,.9), 0 0 2px #fff; }
+  #combo-box { text-align:center; }
+  #combo-box .value { color:#ff2d95; }
+  #best-box { text-align:right; }
+  #best-box .value { color:#ffe94a; text-shadow:0 0 8px rgba(255,233,74,.9); }
+
+  #overlay { position:fixed; inset:0; z-index:10; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; background:rgba(2,2,10,.88); color:#fff; text-align:center; padding:24px;
+    opacity:0; pointer-events:none; transition:opacity .3s ease; }
+  #overlay.show { opacity:1; pointer-events:auto; }
+  #ov-title { font-family:'Press Start 2P',monospace; font-size:22px; line-height:1.6; margin-bottom:14px;
+    color:#ff2d95; text-shadow:0 0 14px #ff2d95, 0 0 40px rgba(255,45,149,.6), 3px 3px 0 #33003a;
+    animation:neon 2.4s infinite; }
+  @keyframes neon {
+    0%,100% { text-shadow:0 0 14px #ff2d95, 0 0 40px rgba(255,45,149,.6), 3px 3px 0 #33003a; }
+    50% { text-shadow:0 0 22px #ff2d95, 0 0 60px rgba(255,45,149,.9), 3px 3px 0 #33003a; }
+  }
+  #ov-sub { font-family:'Press Start 2P',monospace; font-size:9px; line-height:2;
+    color:#22e6ff; text-shadow:0 0 6px rgba(34,230,255,.8); margin-bottom:22px; max-width:320px; }
+  #ov-stats { font-family:'Press Start 2P',monospace; font-size:11px; line-height:2.2;
+    color:#ffe94a; text-shadow:0 0 8px rgba(255,233,74,.8); margin-bottom:26px; }
+  #ov-btn { pointer-events:auto; font-family:'Press Start 2P',monospace; font-size:12px;
+    color:#04040a; background:#ffe94a; border:none; border-radius:4px; padding:16px 34px; cursor:pointer;
+    box-shadow:0 0 18px rgba(255,233,74,.7), 0 5px 0 #a68f00; }
+  #ov-btn:active { transform:translateY(4px); box-shadow:0 0 18px rgba(255,233,74,.7), 0 1px 0 #a68f00; }
+  .blink { animation:blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity:0; } }
+  #coin-line { font-family:'Press Start 2P',monospace; font-size:10px; color:#fff; margin-top:26px;
+    text-shadow:0 0 8px rgba(255,255,255,.6); }
+
+  #toast { position:fixed; left:50%; top:38%; transform:translate(-50%,-50%); pointer-events:none; z-index:8;
+    font-family:'Press Start 2P',monospace; font-size:15px; color:#ffe94a; text-align:center; line-height:1.8;
+    text-shadow:0 0 12px rgba(255,233,74,.9), 2px 2px 0 #4a3a00; opacity:0; transition:opacity .2s, transform .45s; }
+  #toast.show { opacity:1; transform:translate(-50%,-75%); }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="crt"></div>
+<div id="vignette"></div>
+
+<div class="hud">
+  <div id="height-box">
+    <div class="label">HEIGHT</div>
+    <div class="value" id="height">0</div>
+  </div>
+  <div id="combo-box">
+    <div class="label">COMBO</div>
+    <div class="value" id="combo">-</div>
+  </div>
+  <div id="best-box">
+    <div class="label">BEST</div>
+    <div class="value" id="best">0</div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<div id="overlay">
+  <h1 id="ov-title">NAIL POLISH<br>STACK</h1>
+  <div id="ov-sub"></div>
+  <div id="ov-stats"></div>
+  <button id="ov-btn">START</button>
+  <div id="coin-line" class="blink">INSERT COIN</div>
+</div>
+
+<script>
+(() => {
+"use strict";
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const $height = document.getElementById('height');
+const $combo = document.getElementById('combo');
+const $best = document.getElementById('best');
+const overlay = document.getElementById('overlay');
+const $ovTitle = document.getElementById('ov-title');
+const $ovSub = document.getElementById('ov-sub');
+const $ovStats = document.getElementById('ov-stats');
+const $ovBtn = document.getElementById('ov-btn');
+const $toast = document.getElementById('toast');
+
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = W * DPR; canvas.height = H * DPR;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ---------- audio (chiptune) ----------
+let AC = null;
+function beep(freq, dur, type, vol) {
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    if (AC.state === 'suspended') AC.resume();
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(vol, AC.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime + dur);
+    o.connect(g); g.connect(AC.destination);
+    o.start(); o.stop(AC.currentTime + dur);
+  } catch(e) {}
+}
+const sndDrop = () => { beep(180, .06, 'square', .1); };
+const sndTrim = () => { beep(120, .09, 'square', .09); };
+const sndPerfect = (n) => { beep(523 * Math.pow(1.12, Math.min(n, 10)), .12, 'square', .11); };
+const sndFail = () => { [220,180,140,100].forEach((f,i)=>setTimeout(()=>beep(f,.14,'square',.12), i*110)); };
+const sndMilestone = () => { [659,784,1047].forEach((f,i)=>setTimeout(()=>beep(f,.12,'square',.1), i*90)); };
+
+// ---------- palette ----------
+const NEON_PINK = '#ff2d95', NEON_CYAN = '#22e6ff', NEON_YELLOW = '#ffe94a';
+function shadeFor(i) {  // cycle through candy polish hues
+  const hue = (320 + i * 24) % 360;
+  return `hsl(${hue}, 95%, 60%)`;
+}
+function shadeDark(i) {
+  const hue = (320 + i * 24) % 360;
+  return `hsl(${hue}, 95%, 38%)`;
+}
+
+// ---------- state ----------
+const S = { MENU:0, PLAY:1, DEAD:2 };
+let state = S.MENU;
+let layers = [];        // {x, w, i} — y comes from index
+let mover = null;       // {x, w, dir, speed, i}
+let falls = [];         // trimmed pieces {x, y, w, vy, vr, r, i}
+let cam = 0, camTarget = 0;
+let combo = 0, best = 0, heightCount = 0;
+let flash = 0, shake = 0;
+let particles = [];
+let time = 0, lastT = 0;
+
+const LAYER_H = 26;
+const PERFECT_TOL = 6;
+const MIN_W = 10;
+
+function baseW() { return Math.min(W * 0.62, 300); }
+function layerScreenY(i) { return H * 0.74 - i * LAYER_H + cam; }
+
+function reset() {
+  layers = [{ x: W/2 - baseW()/2, w: baseW(), i: 0 }];
+  falls = []; particles = [];
+  cam = 0; camTarget = 0;
+  combo = 0; heightCount = 0;
+  spawnMover();
+  updateHUD();
+}
+
+function spawnMover() {
+  const top = layers[layers.length - 1];
+  const i = layers.length;
+  const fromLeft = i % 2 === 1;
+  mover = {
+    w: top.w,
+    x: fromLeft ? -top.w : W,
+    dir: fromLeft ? 1 : -1,
+    speed: 200 + Math.min(heightCount * 9, 380),
+    i,
+  };
+}
+
+function updateHUD() {
+  $height.textContent = heightCount;
+  $combo.textContent = combo > 1 ? 'x' + combo : '-';
+  $best.textContent = best;
+}
+
+// ---------- core action ----------
+function drop() {
+  if (state !== S.PLAY || !mover) return;
+  const below = layers[layers.length - 1];
+  const left = Math.max(mover.x, below.x);
+  const right = Math.min(mover.x + mover.w, below.x + below.w);
+  const overlap = right - left;
+
+  if (overlap <= MIN_W * 0.4) {
+    // total miss — the bottle tumbles off
+    falls.push({ x: mover.x, y: layerScreenY(mover.i) - cam, w: mover.w,
+      vy: -60, vr: (Math.random()-.5)*8, r: 0, i: mover.i, world: true });
+    mover = null;
+    die();
+    return;
+  }
+
+  const offset = Math.abs(mover.x - below.x);
+  if (offset <= PERFECT_TOL) {
+    // PERFECT — snap into place, keep full width, build combo
+    combo++;
+    layers.push({ x: below.x, w: mover.w, i: mover.i });
+    sndPerfect(combo);
+    burst(below.x + mover.w/2, layerScreenY(mover.i), NEON_YELLOW);
+    if (combo >= 2) toast('PERFECT x' + combo);
+    // every 3rd perfect regrows the bar a little (up to base width)
+    if (combo % 3 === 0) {
+      const top = layers[layers.length - 1];
+      const grow = Math.min(baseW() - top.w, 24);
+      if (grow > 0) {
+        top.x -= grow/2; top.w += grow;
+        toast('WIDTH UP!');
+        sndMilestone();
+      }
+    }
+  } else {
+    // trim the overhang — it falls away
+    combo = 0;
+    const cutW = mover.w - overlap;
+    const cutX = mover.x < below.x ? mover.x : right;
+    falls.push({ x: cutX, y: layerScreenY(mover.i) - cam, w: cutW,
+      vy: 0, vr: (Math.random()-.5)*6, r: 0, i: mover.i, world: true });
+    layers.push({ x: left, w: overlap, i: mover.i });
+    sndDrop(); setTimeout(sndTrim, 40);
+    if (overlap < MIN_W) { mover = null; die(); return; }
+  }
+
+  heightCount++;
+  shake = 4;
+  camTarget = Math.max(0, (layers.length - 1) * LAYER_H - H * 0.28);
+  if (heightCount === 10 || heightCount === 25 || heightCount === 50 || heightCount === 100) {
+    toast(heightCount === 10 ? 'NICE!' : heightCount === 25 ? 'ON FIRE!' : heightCount === 50 ? 'UNSTOPPABLE!' : 'LEGENDARY!');
+    sndMilestone();
+  }
+  updateHUD();
+  spawnMover();
+}
+
+function die() {
+  state = S.DEAD; sndFail(); flash = 1;
+  best = Math.max(best, heightCount);
+  updateHUD();
+  setTimeout(() => {
+    $ovTitle.textContent = 'GAME OVER';
+    $ovSub.innerHTML = 'THE TOWER TOPPLED';
+    $ovStats.innerHTML = `HEIGHT ${heightCount}<br>BEST&nbsp;&nbsp; ${best}`;
+    $ovBtn.textContent = 'CONTINUE?';
+    overlay.classList.add('show');
+  }, 1000);
+}
+
+function toast(msg) {
+  $toast.innerHTML = msg;
+  $toast.classList.add('show');
+  setTimeout(() => $toast.classList.remove('show'), 900);
+}
+
+function startGame() {
+  overlay.classList.remove('show');
+  reset();
+  state = S.PLAY;
+}
+
+// ---------- drawing ----------
+function drawBar(x, y, w, i, isMover) {
+  ctx.save();
+  const fill = shadeFor(i), dark = shadeDark(i);
+  ctx.shadowColor = fill; ctx.shadowBlur = isMover ? 16 : 8;
+  const grd = ctx.createLinearGradient(0, y, 0, y + LAYER_H);
+  grd.addColorStop(0, fill); grd.addColorStop(1, dark);
+  ctx.fillStyle = grd;
+  ctx.fillRect(x, y, w, LAYER_H - 2);
+  ctx.shadowBlur = 0;
+  // glossy shine strip
+  ctx.fillStyle = 'rgba(255,255,255,.4)';
+  ctx.fillRect(x + 3, y + 3, Math.max(w - 6, 0), 4);
+  ctx.strokeStyle = 'rgba(255,255,255,.25)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x + .5, y + .5, w - 1, LAYER_H - 3);
+  // the mover carries the bottle cap
+  if (isMover) {
+    const capW = Math.min(w * 0.4, 54);
+    ctx.fillStyle = '#12102a';
+    ctx.fillRect(x + w/2 - capW/2, y - 14, capW, 14);
+    ctx.strokeStyle = NEON_CYAN; ctx.lineWidth = 1;
+    ctx.strokeRect(x + w/2 - capW/2 + .5, y - 13.5, capW - 1, 13);
+  }
+  ctx.restore();
+}
+
+function drawParticles(dt) {
+  particles = particles.filter(p => (p.life -= dt) > 0);
+  for (const p of particles) {
+    p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 320 * dt;
+    ctx.globalAlpha = Math.min(1, p.life / .5);
+    ctx.fillStyle = p.color;
+    ctx.fillRect(Math.round(p.x), Math.round(p.y), p.size, p.size);
+    ctx.globalAlpha = 1;
+  }
+}
+function burst(x, y, color) {
+  const cols = [color, NEON_CYAN, '#fff'];
+  for (let i = 0; i < 16; i++) {
+    const a = Math.random() * Math.PI * 2, sp = 60 + Math.random() * 220;
+    particles.push({ x, y, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp - 60,
+      life: .5 + Math.random()*.4, size: 3 + Math.floor(Math.random()*3),
+      color: cols[Math.floor(Math.random()*cols.length)] });
+  }
+}
+
+// ---------- main loop ----------
+function frame(t) {
+  requestAnimationFrame(frame);
+  const dt = Math.min((t - lastT) / 1000 || 0, 0.033);
+  lastT = t; time += dt;
+
+  cam += (camTarget - cam) * Math.min(1, dt * 5);
+  flash = Math.max(0, flash - dt * 3);
+  shake = Math.max(0, shake - dt * 30);
+
+  // mover motion — bounces across the screen
+  if (state === S.PLAY && mover) {
+    mover.x += mover.dir * mover.speed * dt;
+    if (mover.dir > 0 && mover.x > W - mover.w * 0.25) mover.dir = -1;
+    if (mover.dir < 0 && mover.x < -mover.w * 0.75) mover.dir = 1;
+  }
+
+  // background: dark + neon grid
+  ctx.fillStyle = '#04040a';
+  ctx.fillRect(0, 0, W, H);
+  const horizon = H * 0.55;
+  ctx.strokeStyle = 'rgba(255,45,149,.14)';
+  ctx.lineWidth = 1;
+  const scroll = (time * 40) % 40;
+  for (let i = 0; i < 14; i++) {
+    const p = (i * 40 + scroll) / (14 * 40);
+    const y = horizon + Math.pow(p, 2.2) * (H - horizon);
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
+  for (let i = -8; i <= 8; i++) {
+    ctx.beginPath();
+    ctx.moveTo(W/2 + i * W * 0.09, horizon);
+    ctx.lineTo(W/2 + i * W * 0.35, H);
+    ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(34,230,255,.5)';
+  for (let i = 0; i < 24; i++) {
+    const x = ((i * 137.5) % W);
+    const y = ((i * 89.3) % horizon);
+    const tw = (Math.sin(time * 2 + i) + 1) / 2;
+    ctx.globalAlpha = 0.15 + tw * 0.4;
+    ctx.fillRect(x, y, 2, 2);
+  }
+  ctx.globalAlpha = 1;
+
+  const sx = (Math.random()-.5) * shake, sy = (Math.random()-.5) * shake;
+  ctx.save();
+  ctx.translate(sx, sy);
+
+  // stacked layers (only draw what's on screen)
+  for (const L of layers) {
+    const y = layerScreenY(L.i);
+    if (y < -LAYER_H || y > H + LAYER_H) continue;
+    drawBar(L.x, y, L.w, L.i, false);
+  }
+
+  // moving bar
+  if (state === S.PLAY && mover) {
+    drawBar(mover.x, layerScreenY(mover.i), mover.w, mover.i, true);
+  }
+
+  // falling trimmed pieces
+  falls = falls.filter(f => f.y + cam < H + 100);
+  for (const f of falls) {
+    f.vy += 1500 * dt;
+    f.y += f.vy * dt;
+    f.r += f.vr * dt;
+    ctx.save();
+    ctx.translate(f.x + f.w/2, f.y + cam + LAYER_H/2);
+    ctx.rotate(f.r);
+    ctx.globalAlpha = .85;
+    ctx.fillStyle = shadeDark(f.i);
+    ctx.fillRect(-f.w/2, -LAYER_H/2, f.w, LAYER_H - 2);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  ctx.restore();
+
+  drawParticles(dt);
+
+  if (flash > 0) {
+    ctx.fillStyle = `rgba(255,51,85,${flash * .35})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  if (state === S.PLAY) {
+    ctx.font = `9px 'Press Start 2P', monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = (Math.floor(time * 2) % 2) ? 'rgba(34,230,255,.7)' : 'rgba(34,230,255,.25)';
+    ctx.fillText('TAP TO DROP', W/2, H - 24);
+  }
+}
+requestAnimationFrame(frame);
+
+// ---------- input ----------
+function onTap(e) {
+  if (overlay.classList.contains('show')) return;
+  e.preventDefault();
+  drop();
+}
+canvas.addEventListener('pointerdown', onTap);
+window.addEventListener('keydown', e => { if (e.code === 'Space') drop(); });
+$ovBtn.addEventListener('click', startGame);
+
+// menu
+$ovSub.innerHTML = 'TAP TO DROP THE POLISH<br>OVERHANG GETS TRIMMED<br>PERFECT DROPS = COMBO<br>3 PERFECTS = WIDTH UP';
+$ovStats.textContent = '';
+$ovBtn.textContent = 'START';
+overlay.classList.add('show');
+
+})();
+</script>
+</body>
+</html>

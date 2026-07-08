@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>LIPSTICK HIT — ARCADE</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { height:100%; overflow:hidden; background:#04040a; touch-action:none;
+    font-family:'VT323',monospace; user-select:none; -webkit-user-select:none; }
+  #game { display:block; width:100%; height:100%; }
+
+  /* ---- CRT screen effect ---- */
+  #crt { position:fixed; inset:0; pointer-events:none; z-index:5;
+    background:
+      repeating-linear-gradient(0deg, rgba(0,0,0,.22) 0px, rgba(0,0,0,.22) 1px, transparent 2px, transparent 4px);
+    mix-blend-mode:multiply; }
+  #vignette { position:fixed; inset:0; pointer-events:none; z-index:6;
+    background:radial-gradient(ellipse at center, transparent 55%, rgba(0,0,10,.55) 100%);
+    animation:flicker 4s infinite; }
+  @keyframes flicker {
+    0%,100% { opacity:1; } 92% { opacity:1; } 93% { opacity:.86; } 94% { opacity:1; } 97% { opacity:.93; } 98% { opacity:1; }
+  }
+  @media (prefers-reduced-motion: reduce) { #vignette { animation:none; } .blink { animation:none !important; } #ov-title { animation:none !important; } }
+
+  /* ---- HUD ---- */
+  .hud { position:fixed; top:0; left:0; right:0; z-index:4;
+    padding:calc(12px + env(safe-area-inset-top)) 16px 0;
+    display:flex; justify-content:space-between; align-items:flex-start; pointer-events:none; }
+  .hud .label { font-family:'Press Start 2P',monospace; font-size:8px; letter-spacing:.1em;
+    color:#22e6ff; text-shadow:0 0 6px rgba(34,230,255,.8); margin-bottom:6px; }
+  .hud .value { font-family:'Press Start 2P',monospace; font-size:16px;
+    color:#fff; text-shadow:0 0 8px rgba(255,45,149,.9), 0 0 2px #fff; }
+  #stage-box { text-align:center; }
+  #score-box { text-align:right; }
+  #score-box .value { color:#ffe94a; text-shadow:0 0 8px rgba(255,233,74,.9); }
+
+  /* ---- Overlay ---- */
+  #overlay { position:fixed; inset:0; z-index:10; display:flex; flex-direction:column; align-items:center;
+    justify-content:center; background:rgba(2,2,10,.88); color:#fff; text-align:center; padding:24px;
+    opacity:0; pointer-events:none; transition:opacity .3s ease; }
+  #overlay.show { opacity:1; pointer-events:auto; }
+  #ov-title { font-family:'Press Start 2P',monospace; font-size:26px; line-height:1.5; margin-bottom:14px;
+    color:#ff2d95; text-shadow:0 0 14px #ff2d95, 0 0 40px rgba(255,45,149,.6), 3px 3px 0 #33003a;
+    animation:neon 2.4s infinite; }
+  @keyframes neon {
+    0%,100% { text-shadow:0 0 14px #ff2d95, 0 0 40px rgba(255,45,149,.6), 3px 3px 0 #33003a; }
+    50% { text-shadow:0 0 22px #ff2d95, 0 0 60px rgba(255,45,149,.9), 3px 3px 0 #33003a; }
+  }
+  #ov-sub { font-family:'Press Start 2P',monospace; font-size:9px; line-height:2;
+    color:#22e6ff; text-shadow:0 0 6px rgba(34,230,255,.8); margin-bottom:22px; max-width:320px; }
+  #ov-stats { font-family:'Press Start 2P',monospace; font-size:11px; line-height:2.2;
+    color:#ffe94a; text-shadow:0 0 8px rgba(255,233,74,.8); margin-bottom:26px; }
+  #ov-btn { pointer-events:auto; font-family:'Press Start 2P',monospace; font-size:12px;
+    color:#04040a; background:#ffe94a; border:none; border-radius:4px; padding:16px 34px; cursor:pointer;
+    box-shadow:0 0 18px rgba(255,233,74,.7), 0 5px 0 #a68f00; }
+  #ov-btn:active { transform:translateY(4px); box-shadow:0 0 18px rgba(255,233,74,.7), 0 1px 0 #a68f00; }
+  .blink { animation:blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity:0; } }
+  #coin-line { font-family:'Press Start 2P',monospace; font-size:10px; color:#fff; margin-top:26px;
+    text-shadow:0 0 8px rgba(255,255,255,.6); }
+
+  #toast { position:fixed; left:50%; top:44%; transform:translate(-50%,-50%); pointer-events:none; z-index:8;
+    font-family:'Press Start 2P',monospace; font-size:16px; color:#ffe94a; text-align:center; line-height:1.8;
+    text-shadow:0 0 12px rgba(255,233,74,.9), 2px 2px 0 #4a3a00; opacity:0; transition:opacity .25s, transform .5s; }
+  #toast.show { opacity:1; transform:translate(-50%,-72%); }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="crt"></div>
+<div id="vignette"></div>
+
+<div class="hud">
+  <div id="lives-box">
+    <div class="label">SHOTS</div>
+    <div class="value" id="shots">0</div>
+  </div>
+  <div id="stage-box">
+    <div class="label">ROUND</div>
+    <div class="value" id="stage">1/3</div>
+  </div>
+  <div id="score-box">
+    <div class="label">SCORE</div>
+    <div class="value" id="score">000000</div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<div id="overlay">
+  <h1 id="ov-title">LIPSTICK<br>HIT</h1>
+  <div id="ov-sub"></div>
+  <div id="ov-stats"></div>
+  <button id="ov-btn">START</button>
+  <div id="coin-line" class="blink">INSERT COIN</div>
+</div>
+
+<script>
+(() => {
+"use strict";
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const $shots = document.getElementById('shots');
+const $stage = document.getElementById('stage');
+const $score = document.getElementById('score');
+const overlay = document.getElementById('overlay');
+const $ovTitle = document.getElementById('ov-title');
+const $ovSub = document.getElementById('ov-sub');
+const $ovStats = document.getElementById('ov-stats');
+const $ovBtn = document.getElementById('ov-btn');
+const $coinLine = document.getElementById('coin-line');
+const $toast = document.getElementById('toast');
+
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = W * DPR; canvas.height = H * DPR;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ---------- audio (chiptune) ----------
+let AC = null;
+function beep(freq, dur, type, vol) {
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    if (AC.state === 'suspended') AC.resume();
+    const o = AC.createOscillator(), g = AC.createGain();
+    o.type = type; o.frequency.value = freq;
+    g.gain.setValueAtTime(vol, AC.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, AC.currentTime + dur);
+    o.connect(g); g.connect(AC.destination);
+    o.start(); o.stop(AC.currentTime + dur);
+  } catch(e) {}
+}
+const sndStick = () => { beep(160, .07, 'square', .12); beep(640, .05, 'square', .06); };
+const sndFail  = () => { [220,180,140,100].forEach((f,i)=>setTimeout(()=>beep(f,.14,'square',.12), i*110)); };
+const sndClear = () => { [523,659,784].forEach((f,i)=>setTimeout(()=>beep(f,.12,'square',.1), i*100)); };
+const sndVictory = () => { [523,659,784,1047,784,1047].forEach((f,i)=>setTimeout(()=>beep(f,.16,'square',.11), i*130)); };
+const sndCoin  = () => { beep(988, .08, 'square', .1); setTimeout(()=>beep(1319,.22,'square',.1), 80); };
+const sndTick  = () => { beep(1400, .05, 'square', .08); };
+
+// ---------- palette ----------
+const SHADES = ['#ff2d95','#ff4d4d','#ff7ab8','#e02be0','#ff3355','#ff66a3'];
+const NEON_PINK = '#ff2d95', NEON_CYAN = '#22e6ff', NEON_YELLOW = '#ffe94a';
+
+// ---------- stages ----------
+const STAGES = [
+  { shots: 6,  time: 30, speed: 1.5, spinMin: 1.6, spinMax: 2.8, pause: 0.30, pre: 0, coins: 1 },
+  { shots: 8,  time: 25, speed: 2.2, spinMin: 1.1, spinMax: 2.0, pause: 0.18, pre: 2, coins: 1 },
+  { shots: 10, time: 22, speed: 3.0, spinMin: 0.7, spinMax: 1.5, pause: 0.10, pre: 4, coins: 2 },
+];
+
+// ---------- state ----------
+const S = { MENU:0, PLAY:1, FLY:2, LEVELUP:3, DEAD:4, WIN:5 };
+let state = S.MENU;
+let stage = 1, score = 0, best = 0;
+let rot = 0, rotSpeed = 0;
+let spin = null;
+let stuck = [];
+let coins = [];
+let remaining = 0;
+let timeLeft = 0, timeTotal = 1, lastWholeSec = 99;
+let fly = null;
+let heldShade = SHADES[0];
+let shake = 0, deadAnim = null, flash = 0;
+let particles = [];
+let time = 0, lastT = 0;
+
+function wheelGeom() {
+  const R = Math.min(W, H * 0.62) * 0.30;
+  return { cx: W/2, cy: H * 0.30 + 10, R: Math.max(70, Math.min(R, 140)) };
+}
+function lipLen() { return wheelGeom().R * 1.05; }
+function cfg() { return STAGES[stage - 1]; }
+
+// ---------- stop-and-reverse rotation ----------
+function newSpin(c) {
+  return { dir: Math.random() < .5 ? 1 : -1, phase: 'spin',
+    timer: c.spinMin + Math.random() * (c.spinMax - c.spinMin) };
+}
+function updateSpin(dt) {
+  const c = cfg();
+  if (!spin) return;
+  spin.timer -= dt;
+  if (spin.phase === 'spin') {
+    // gentle ease-in toward full speed
+    rotSpeed += (spin.dir * c.speed - rotSpeed) * Math.min(1, dt * 4);
+    if (spin.timer <= 0) { spin.phase = 'stopping'; spin.timer = 0.45; }
+  } else if (spin.phase === 'stopping') {
+    // long, gradual glide down to a stop
+    rotSpeed += (0 - rotSpeed) * Math.min(1, dt * 7);
+    if (spin.timer <= 0) { spin.phase = 'paused'; spin.timer = c.pause; rotSpeed = 0; }
+  } else {
+    rotSpeed = 0;
+    if (spin.timer <= 0) {
+      // pick a fresh direction at random — may continue the same way or reverse
+      spin.dir = Math.random() < .5 ? 1 : -1;
+      spin.phase = 'spin';
+      spin.timer = c.spinMin + Math.random() * (c.spinMax - c.spinMin);
+    }
+  }
+  rot += rotSpeed * dt;
+}
+
+// ---------- stage setup ----------
+function setupStage(n) {
+  const c = STAGES[n - 1];
+  stuck = []; coins = []; fly = null;
+  remaining = c.shots;
+  timeLeft = c.time; timeTotal = c.time; lastWholeSec = c.time;
+  heldShade = SHADES[n % SHADES.length];
+  spin = newSpin(c);
+  rotSpeed = 0;
+
+  for (let i = 0; i < c.pre; i++) {
+    let a, ok, tries = 0;
+    do {
+      a = Math.random() * Math.PI * 2; ok = true;
+      for (const s of stuck) if (angDiff(a, s.a) < minGap() * 1.6) { ok = false; break; }
+    } while (!ok && ++tries < 40);
+    if (ok) stuck.push({ a, shade: SHADES[(n+1+i) % SHADES.length], pre: true });
+  }
+  for (let i = 0; i < c.coins; i++) {
+    let a, ok, tries = 0;
+    do {
+      a = Math.random() * Math.PI * 2; ok = true;
+      for (const s of stuck) if (angDiff(a, s.a) < minGap() * 1.4) { ok = false; break; }
+      for (const co of coins) if (angDiff(a, co.a) < 0.6) { ok = false; break; }
+    } while (!ok && ++tries < 40);
+    if (ok) coins.push({ a, alive: true });
+  }
+  updateHUD();
+}
+
+function minGap() {
+  // True angular width of a lipstick at the wheel rim.
+  const g = wheelGeom();
+  const bodyW = lipLen() * 0.16 * 1.16;
+  return (bodyW / g.R) * 0.95;
+}
+function angDiff(a, b) {
+  let d = Math.abs(a - b) % (Math.PI * 2);
+  return d > Math.PI ? Math.PI * 2 - d : d;
+}
+function updateHUD() {
+  $shots.textContent = remaining;
+  $stage.textContent = stage + '/3';
+  $score.textContent = String(score).padStart(6, '0');
+}
+
+// ---------- drawing ----------
+function drawLipstick(x, y, ang, shade, glow) {
+  const L = lipLen();
+  const w = L * 0.16;
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(ang);
+  if (glow) { ctx.shadowColor = shade; ctx.shadowBlur = 16; }
+  const tipH = L * 0.34, caseH = L * 0.16, baseH = L * 0.50;
+  let yy = -L/2;
+  ctx.beginPath();
+  ctx.moveTo(-w/2, yy + tipH);
+  ctx.lineTo(-w/2, yy + tipH*0.42);
+  ctx.quadraticCurveTo(-w/2, yy, w/2*0.7, yy + tipH*0.14);
+  ctx.lineTo(w/2, yy + tipH*0.5);
+  ctx.lineTo(w/2, yy + tipH);
+  ctx.closePath();
+  ctx.fillStyle = shade; ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,.35)';
+  ctx.fillRect(-w/2 + w*0.12, yy + tipH*0.28, w*0.16, tipH*0.6);
+  yy += tipH;
+  ctx.fillStyle = NEON_YELLOW;
+  ctx.fillRect(-w/2 - w*0.08, yy, w + w*0.16, caseH);
+  yy += caseH;
+  ctx.shadowBlur = 0;
+  const grd2 = ctx.createLinearGradient(-w/2,0,w/2,0);
+  grd2.addColorStop(0, '#12102a'); grd2.addColorStop(.45, '#3a2a66'); grd2.addColorStop(1, '#12102a');
+  ctx.fillStyle = grd2;
+  const r = w*0.22;
+  ctx.beginPath();
+  ctx.moveTo(-w/2 - w*0.08, yy);
+  ctx.lineTo(w/2 + w*0.08, yy);
+  ctx.lineTo(w/2 + w*0.08, yy + baseH - r);
+  ctx.quadraticCurveTo(w/2 + w*0.08, yy + baseH, w/2 + w*0.08 - r, yy + baseH);
+  ctx.lineTo(-w/2 - w*0.08 + r, yy + baseH);
+  ctx.quadraticCurveTo(-w/2 - w*0.08, yy + baseH, -w/2 - w*0.08, yy + baseH - r);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = 'rgba(34,230,255,.5)'; ctx.lineWidth = 1;
+  ctx.stroke();
+  ctx.fillStyle = NEON_CYAN;
+  ctx.fillRect(-w*0.14, yy + baseH*0.42, w*0.28, w*0.28);
+  ctx.restore();
+}
+
+function drawCoin(x, y, r) {
+  // spinning arcade coin: width oscillates
+  const squish = Math.abs(Math.sin(time * 4));
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.shadowColor = NEON_YELLOW; ctx.shadowBlur = 12;
+  ctx.fillStyle = NEON_YELLOW;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, Math.max(r * squish, r*0.15), r, 0, 0, Math.PI*2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  if (squish > 0.5) {
+    ctx.fillStyle = '#a68f00';
+    ctx.font = `bold ${r*1.2}px 'VT323', monospace`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('¢', 0, 1);
+  }
+  ctx.restore();
+}
+
+function drawWheel(g) {
+  const { cx, cy, R } = g;
+  ctx.save();
+  const sx = (Math.random()-.5) * shake, sy = (Math.random()-.5) * shake;
+  ctx.translate(cx + sx, cy + sy);
+
+  // neon halo
+  ctx.beginPath(); ctx.arc(0, 0, R*1.3, 0, Math.PI*2);
+  ctx.fillStyle = 'rgba(255,45,149,.05)'; ctx.fill();
+
+  // --- timer ring ---
+  if (state === S.PLAY || state === S.FLY) {
+    const frac = Math.max(0, timeLeft / timeTotal);
+    const low = timeLeft <= 5;
+    ctx.beginPath();
+    ctx.arc(0, 0, R * 1.18, 0, Math.PI * 2);
+    ctx.strokeStyle = 'rgba(34,230,255,.15)'; ctx.lineWidth = 5; ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0, 0, R * 1.18, -Math.PI/2, -Math.PI/2 + frac * Math.PI * 2);
+    ctx.strokeStyle = low ? '#ff3355' : NEON_CYAN;
+    ctx.shadowColor = low ? '#ff3355' : NEON_CYAN; ctx.shadowBlur = 10;
+    ctx.lineWidth = low ? 6 + Math.sin(time*10)*1.5 : 5;
+    ctx.lineCap = 'butt';
+    ctx.stroke();
+    ctx.shadowBlur = 0;
+  }
+
+  ctx.rotate(rot);
+  // outer neon rim
+  ctx.beginPath(); ctx.arc(0,0,R,0,Math.PI*2);
+  ctx.fillStyle = '#0d0b1e'; ctx.fill();
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = NEON_PINK;
+  ctx.shadowColor = NEON_PINK; ctx.shadowBlur = 18;
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  // segment ticks (rotation reads clearly)
+  for (let i = 0; i < 12; i++) {
+    const a = i * Math.PI / 6;
+    ctx.strokeStyle = i % 3 === 0 ? NEON_CYAN : 'rgba(34,230,255,.35)';
+    ctx.lineWidth = i % 3 === 0 ? 3 : 1.5;
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a)*R*0.72, Math.sin(a)*R*0.72);
+    ctx.lineTo(Math.cos(a)*R*0.94, Math.sin(a)*R*0.94);
+    ctx.stroke();
+  }
+  // inner disc + rings
+  ctx.beginPath(); ctx.arc(0,0,R*0.62,0,Math.PI*2);
+  ctx.strokeStyle = 'rgba(255,45,149,.4)'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.beginPath(); ctx.arc(0,0,R*0.34,0,Math.PI*2);
+  ctx.fillStyle = '#1a0f2e'; ctx.fill();
+  ctx.strokeStyle = 'rgba(34,230,255,.5)'; ctx.lineWidth = 1.5; ctx.stroke();
+  // center kiss target
+  ctx.font = `${R*0.34}px serif`;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.shadowColor = NEON_PINK; ctx.shadowBlur = 12;
+  ctx.fillText('💋', 0, R*0.02);
+  ctx.shadowBlur = 0;
+  ctx.restore();
+
+  // countdown number
+  if (state === S.PLAY || state === S.FLY) {
+    const low = timeLeft <= 5;
+    ctx.font = `${low ? 22 : 16}px 'Press Start 2P', monospace`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = low ? '#ff3355' : NEON_CYAN;
+    ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 8;
+    ctx.fillText(Math.ceil(timeLeft), cx, cy + g.R * 1.5);
+    ctx.shadowBlur = 0;
+  }
+
+  // coins (bonus)
+  for (const co of coins) {
+    if (!co.alive) continue;
+    const A = rot + co.a;
+    drawCoin(cx + Math.cos(A) * (R + 16) + sx, cy + Math.sin(A) * (R + 16) + sy, 11);
+  }
+
+  // stuck lipsticks
+  for (const s of stuck) {
+    const A = rot + s.a;
+    const L = lipLen();
+    const d = R + L/2 - L*0.30;
+    const x = cx + Math.cos(A) * d + sx, y = cy + Math.sin(A) * d + sy;
+    drawLipstick(x, y, A - Math.PI/2 + Math.PI, s.shade, false);
+  }
+}
+
+function drawParticles(dt) {
+  particles = particles.filter(p => (p.life -= dt) > 0);
+  for (const p of particles) {
+    p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 320 * dt;
+    ctx.globalAlpha = Math.min(1, p.life / .5);
+    ctx.fillStyle = p.color;
+    // pixel-square particles
+    const s = p.size;
+    ctx.fillRect(Math.round(p.x - s/2), Math.round(p.y - s/2), s, s);
+    ctx.globalAlpha = 1;
+  }
+}
+function burst(x, y, color) {
+  const cols = [color, NEON_CYAN, NEON_YELLOW, '#fff'];
+  for (let i = 0; i < 18; i++) {
+    const a = Math.random() * Math.PI * 2, sp = 60 + Math.random() * 240;
+    particles.push({ x, y, vx: Math.cos(a)*sp, vy: Math.sin(a)*sp - 60,
+      life: .5 + Math.random()*.5, size: 3 + Math.floor(Math.random()*4),
+      color: cols[Math.floor(Math.random()*cols.length)] });
+  }
+}
+
+// ---------- game flow ----------
+function shoot() {
+  if (state !== S.PLAY || fly || remaining <= 0) return;
+  fly = { y: H * 0.82, shade: heldShade };
+  state = S.FLY;
+  beep(320, .05, 'square', .07);
+}
+
+function stickAt(rotAtHit) {
+  const relA = norm(Math.PI/2 - rotAtHit);
+  for (const co of coins) {
+    if (co.alive && angDiff(relA, co.a) < 0.30) {
+      co.alive = false; score += 3; sndCoin();
+      const g = wheelGeom();
+      burst(g.cx, g.cy + g.R, NEON_YELLOW);
+      toast('+3 COIN!');
+    }
+  }
+  for (const s of stuck) {
+    if (angDiff(relA, s.a) < minGap()) return false;
+  }
+  stuck.push({ a: relA, shade: fly.shade });
+  score += 1; remaining -= 1;
+  shake = 7; sndStick();
+  heldShade = SHADES[Math.floor(Math.random() * SHADES.length)];
+  updateHUD();
+  return true;
+}
+
+function norm(a) { a %= Math.PI*2; return a < 0 ? a + Math.PI*2 : a; }
+
+function stageClear() {
+  const bonus = Math.floor(timeLeft / 2);
+  score += bonus;
+  updateHUD();
+
+  if (stage >= 3) { win(); return; }
+
+  state = S.LEVELUP; sndClear();
+  const g = wheelGeom();
+  burst(g.cx, g.cy, NEON_PINK);
+  burst(g.cx, g.cy, NEON_YELLOW);
+  toast(bonus > 0 ? `ROUND CLEAR!\nTIME BONUS +${bonus}` : 'ROUND CLEAR!');
+  setTimeout(() => { stage++; setupStage(stage); state = S.PLAY;
+    toast(stage === 2 ? 'SPEED UP!' : 'FINAL ROUND!'); }, 1400);
+}
+
+function win() {
+  state = S.WIN; sndVictory();
+  best = Math.max(best, score);
+  const g = wheelGeom();
+  for (let i = 0; i < 5; i++)
+    setTimeout(() => { burst(g.cx + (Math.random()-.5)*W*.6, g.cy + (Math.random()-.5)*180, i%2 ? NEON_PINK : NEON_YELLOW); }, i*200);
+  setTimeout(() => {
+    $ovTitle.textContent = 'YOU WIN!';
+    $ovSub.innerHTML = 'ALL 3 ROUNDS CLEARED';
+    $ovStats.innerHTML = `SCORE ${String(score).padStart(6,'0')}<br>HI&nbsp;&nbsp;&nbsp; ${String(best).padStart(6,'0')}`;
+    $ovBtn.textContent = 'PLAY AGAIN';
+    $coinLine.style.display = 'block';
+    overlay.classList.add('show');
+  }, 1300);
+}
+
+function die(reason) {
+  state = S.DEAD; sndFail(); flash = 1;
+  deadAnim = { y: H * 0.62, vy: -180, vr: 9, r: 0, shade: fly ? fly.shade : heldShade, t: 0 };
+  fly = null;
+  best = Math.max(best, score);
+  setTimeout(() => {
+    $ovTitle.textContent = 'GAME OVER';
+    $ovSub.innerHTML = reason === 'time' ? 'TIME UP!' : 'LIPSTICK CLASH!';
+    $ovStats.innerHTML = `SCORE ${String(score).padStart(6,'0')}<br>HI&nbsp;&nbsp;&nbsp; ${String(best).padStart(6,'0')}<br>ROUND ${stage}/3`;
+    $ovBtn.textContent = 'CONTINUE?';
+    $coinLine.style.display = 'block';
+    overlay.classList.add('show');
+  }, 900);
+}
+
+function toast(msg) {
+  if (!msg) return;
+  $toast.innerHTML = msg.replace('\n', '<br>');
+  $toast.classList.add('show');
+  setTimeout(() => $toast.classList.remove('show'), 1100);
+}
+
+function startGame() {
+  overlay.classList.remove('show');
+  stage = 1; score = 0; deadAnim = null; particles = [];
+  setupStage(1);
+  state = S.PLAY;
+}
+
+// ---------- main loop ----------
+function frame(t) {
+  requestAnimationFrame(frame);
+  const dt = Math.min((t - lastT) / 1000 || 0, 0.033);
+  lastT = t; time += dt;
+
+  if (state === S.PLAY || state === S.FLY || state === S.LEVELUP) {
+    updateSpin(dt);
+  }
+
+  if (state === S.PLAY || state === S.FLY) {
+    timeLeft -= dt;
+    const whole = Math.ceil(timeLeft);
+    if (whole !== lastWholeSec && whole <= 5 && whole > 0) { sndTick(); lastWholeSec = whole; }
+    if (timeLeft <= 0) { timeLeft = 0; die('time'); }
+  }
+
+  shake = Math.max(0, shake - dt * 40);
+  flash = Math.max(0, flash - dt * 3);
+
+  // --- arcade background: dark + perspective grid floor ---
+  ctx.fillStyle = '#04040a';
+  ctx.fillRect(0, 0, W, H);
+  const horizon = H * 0.55;
+  ctx.strokeStyle = 'rgba(255,45,149,.16)';
+  ctx.lineWidth = 1;
+  const scroll = (time * 40) % 40;
+  for (let i = 0; i < 14; i++) {          // horizontal lines rushing toward viewer
+    const p = (i * 40 + scroll) / (14 * 40);
+    const y = horizon + Math.pow(p, 2.2) * (H - horizon);
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
+  for (let i = -8; i <= 8; i++) {          // converging verticals
+    ctx.beginPath();
+    ctx.moveTo(W/2 + i * W * 0.09, horizon);
+    ctx.lineTo(W/2 + i * W * 0.35, H);
+    ctx.stroke();
+  }
+  // starfield above horizon
+  ctx.fillStyle = 'rgba(34,230,255,.5)';
+  for (let i = 0; i < 24; i++) {
+    const x = ((i * 137.5) % W);
+    const y = ((i * 89.3) % horizon);
+    const tw = (Math.sin(time * 2 + i) + 1) / 2;
+    ctx.globalAlpha = 0.15 + tw * 0.4;
+    ctx.fillRect(x, y, 2, 2);
+  }
+  ctx.globalAlpha = 1;
+
+  const g = wheelGeom();
+
+  if (state === S.FLY && fly) {
+    const prevTipY = fly.y - lipLen()/2;
+    fly.y -= 2200 * dt;
+    const tipY = fly.y - lipLen()/2;
+    const rim = g.cy + g.R;
+    if (tipY <= rim) {
+      const f = (prevTipY - rim) / Math.max(prevTipY - tipY, 0.0001);
+      const rotAtHit = rot - rotSpeed * dt * (1 - Math.min(Math.max(f, 0), 1));
+      if (stickAt(rotAtHit)) {
+        fly = null;
+        if (remaining <= 0) stageClear();
+        else state = S.PLAY;
+      } else {
+        die('clash');
+      }
+    }
+  }
+
+  drawWheel(g);
+
+  if (state === S.PLAY && remaining > 0) {
+    const bob = Math.sin(time * 3) * 4;
+    drawLipstick(W/2, H * 0.82 + bob, 0, heldShade, true);
+    // ammo pips
+    ctx.fillStyle = NEON_CYAN;
+    for (let i = 0; i < remaining - 1; i++) {
+      ctx.fillRect(W/2 - ((remaining-2)*10)/2 + i*10 - 2, H*0.82 + lipLen()*0.72, 5, 5);
+    }
+  }
+  if (fly) drawLipstick(W/2, fly.y, 0, fly.shade, true);
+
+  if (deadAnim) {
+    deadAnim.t += dt;
+    deadAnim.vy += 1400 * dt;
+    deadAnim.y += deadAnim.vy * dt;
+    deadAnim.r += deadAnim.vr * dt;
+    if (deadAnim.y < H + 200) drawLipstick(W/2, deadAnim.y, deadAnim.r, deadAnim.shade, true);
+  }
+
+  drawParticles(dt);
+
+  if (flash > 0) {
+    ctx.fillStyle = `rgba(255,51,85,${flash * .35})`;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  if (state === S.PLAY) {
+    ctx.font = `9px 'Press Start 2P', monospace`;
+    ctx.textAlign = 'center';
+    ctx.fillStyle = (Math.floor(time * 2) % 2) ? 'rgba(34,230,255,.7)' : 'rgba(34,230,255,.25)';
+    ctx.fillText('TAP TO SHOOT', W/2, H - 24);
+  }
+}
+requestAnimationFrame(frame);
+
+// ---------- input ----------
+function onTap(e) {
+  if (overlay.classList.contains('show')) return;
+  e.preventDefault();
+  shoot();
+}
+canvas.addEventListener('pointerdown', onTap);
+window.addEventListener('keydown', e => { if (e.code === 'Space') shoot(); });
+$ovBtn.addEventListener('click', startGame);
+
+// menu
+$ovTitle.innerHTML = 'LIPSTICK<br>HIT';
+$ovSub.innerHTML = '3 ROUNDS &middot; BEAT THE CLOCK<br>UNPREDICTABLE WHEEL<br>DON\u2019T CLASH!';
+$ovStats.textContent = '';
+$ovBtn.textContent = 'START';
+overlay.classList.add('show');
+
+})();
+</script>
+</body>
+</html>
