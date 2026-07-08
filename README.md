@@ -10,6 +10,7 @@ A neon retro-arcade machine with two mini-games, built with Claude. No ads, no t
 
 - 💄 **Lipstick Hit** — tap to shoot lipsticks into a spinning wheel. 3 rounds, beat the clock, don't clash!
 - 💅 **Polish Stack** — drop and stack polish bars. Perfect drops build combos; 3 in a row regrows your bar.
+- 🌸 **Perfume Pop** — spritz the rising scent bubbles before time runs out. Gems score triple, combos pay bonus — but don't pop the stinkers!
 
 Standalone versions of each game are in [`games/`](games/).
 

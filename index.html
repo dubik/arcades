@@ -78,10 +78,12 @@
     cursor:pointer; box-shadow:0 0 14px rgba(255,45,149,.35), inset 0 0 22px rgba(255,45,149,.08); }
   .cart:active { transform:scale(.97); }
   .cart.cyan { border-color:#22e6ff; box-shadow:0 0 14px rgba(34,230,255,.35), inset 0 0 22px rgba(34,230,255,.08); }
+  .cart.yellow { border-color:#ffe94a; box-shadow:0 0 14px rgba(255,233,74,.35), inset 0 0 22px rgba(255,233,74,.08); }
   .cart .icon { font-size:34px; filter:drop-shadow(0 0 8px rgba(255,45,149,.8)); }
   .cart .name { font-family:'Press Start 2P',monospace; font-size:11px; color:#fff; line-height:1.7;
     text-shadow:0 0 8px rgba(255,45,149,.8); margin-bottom:4px; }
   .cart.cyan .name { text-shadow:0 0 8px rgba(34,230,255,.8); }
+  .cart.yellow .name { text-shadow:0 0 8px rgba(255,233,74,.8); }
   .cart .tag { font-family:'VT323',monospace; font-size:16px; color:rgba(255,255,255,.65); line-height:1.2; }
   .cart .hi { font-family:'Press Start 2P',monospace; font-size:8px; color:#ffe94a; margin-top:6px;
     text-shadow:0 0 6px rgba(255,233,74,.7); }
@@ -131,6 +133,14 @@
         <span class="name">POLISH STACK</span><br>
         <span class="tag">Drop &amp; stack polish bars. Perfect drops build combos.</span>
         <div class="hi" id="hi-stack">HI 0</div>
+      </span>
+    </button>
+    <button class="cart yellow" id="cart-perfume">
+      <span class="icon">🌸</span>
+      <span>
+        <span class="name">PERFUME POP</span><br>
+        <span class="tag">Spritz the scent bubbles before time runs out. Don't pop the stinkers!</span>
+        <div class="hi" id="hi-perfume">HI 000000</div>
       </span>
     </button>
   </div>
@@ -377,6 +387,7 @@ function showMenu() {
   $ovBack.classList.remove('show');
   document.getElementById('hi-lipstick').textContent = 'HI ' + String(GameLipstick.best).padStart(6,'0');
   document.getElementById('hi-stack').textContent = 'HI ' + GameStack.best;
+  document.getElementById('hi-perfume').textContent = 'HI ' + String(GamePerfume.best).padStart(6,'0');
   overlay.classList.add('show');
 }
 
@@ -999,6 +1010,272 @@ const GameStack = (() => {
 })();
 
 // ============================================================
+//  GAME 3: PERFUME POP
+// ============================================================
+const GamePerfume = (() => {
+  const S = { PLAY:1, LEVELUP:2, DEAD:3, WIN:4 };
+  const ROUNDS = [
+    { need:10, time:30, speed:70,  stink:.12, rMin:25, rMax:33, spawn:.70 },
+    { need:14, time:26, speed:95,  stink:.18, rMin:21, rMax:29, spawn:.58 },
+    { need:18, time:22, speed:125, stink:.24, rMin:18, rMax:25, spawn:.48 },
+  ];
+  const GOOD = [
+    { kind:'heart', emoji:'💖', pts:1, rim:NEON_PINK },
+    { kind:'star',  emoji:'⭐', pts:1, rim:NEON_CYAN },
+    { kind:'gem',   emoji:'💎', pts:3, rim:'#7df9ff' },
+  ];
+  const STINK = { kind:'stink', emoji:'🦨', pts:0, rim:'#54e356' };
+
+  let state, round, score, needLeft, timeLeft, timeTotal, lastWholeSec;
+  let bubbles, spawnT, combo, flash, sprays;
+  let time = 0;
+
+  const G = { name: 'PERFUME POP', best: 0 };
+
+  const sndPop = () => { beep(740, .06, 'square', .1); setTimeout(()=>beep(1180,.09,'square',.07), 40); };
+  const sndPuff = () => { beep(300, .05, 'square', .05); };
+  const sndStink = () => { [200,150,110].forEach((f,i)=>setTimeout(()=>beep(f,.12,'square',.11), i*90)); };
+
+  function cfg() { return ROUNDS[round - 1]; }
+  function bubbleX(b) { return b.bx + Math.sin(time * b.wobS + b.wobP) * b.wobA; }
+
+  function spawnBubble() {
+    const c = cfg();
+    const r = c.rMin + Math.random() * (c.rMax - c.rMin);
+    const t = Math.random() < c.stink ? STINK
+      : (Math.random() < .10 ? GOOD[2] : GOOD[Math.random() < .5 ? 0 : 1]);
+    bubbles.push({
+      bx: r + 20 + Math.random() * (W - 2 * (r + 20)),
+      y: H + r + 6,
+      r,
+      vy: c.speed * (.85 + Math.random() * .4),
+      wobA: 10 + Math.random() * 22,
+      wobP: Math.random() * Math.PI * 2,
+      wobS: 1 + Math.random() * 1.4,
+      kind: t.kind, emoji: t.emoji, pts: t.pts, rim: t.rim,
+    });
+  }
+
+  function updateHUD() {
+    hudVal(0, needLeft);
+    hudVal(1, round + '/3');
+    hudVal(2, String(score).padStart(6, '0'));
+  }
+
+  function setupRound(n) {
+    const c = ROUNDS[n - 1];
+    bubbles = []; sprays = [];
+    needLeft = c.need;
+    timeLeft = c.time; timeTotal = c.time; lastWholeSec = c.time;
+    spawnT = 0.2;
+    updateHUD();
+  }
+
+  function roundClear() {
+    const bonus = Math.floor(timeLeft / 2);
+    score += bonus;
+    updateHUD();
+    if (round >= 3) { win(); return; }
+    state = S.LEVELUP; sndClear();
+    burst(W/2, H*0.4, NEON_PINK);
+    burst(W/2, H*0.4, NEON_YELLOW);
+    toast(bonus > 0 ? `ROUND CLEAR!\nTIME BONUS +${bonus}` : 'ROUND CLEAR!');
+    later(() => { round++; setupRound(round); state = S.PLAY;
+      toast(round === 2 ? 'FASTER BUBBLES!' : 'FINAL ROUND!'); }, 1400);
+  }
+
+  function win() {
+    state = S.WIN; sndVictory();
+    G.best = Math.max(G.best, score);
+    for (let i = 0; i < 10; i++)
+      later(() => launchFirework(), 200 + i * 320);
+    later(() => {
+      showEnd({ title: 'YOU WIN!', sub: 'ALL 3 ROUNDS CLEARED',
+        stats: `SCORE ${String(score).padStart(6,'0')}<br>HI&nbsp;&nbsp;&nbsp; ${String(G.best).padStart(6,'0')}`,
+        btn: 'PLAY AGAIN' });
+    }, 3600);
+  }
+
+  function die() {
+    state = S.DEAD; sndFail(); flash = 1;
+    G.best = Math.max(G.best, score);
+    later(() => {
+      showEnd({ title: 'GAME OVER', sub: 'TIME UP!',
+        stats: `SCORE ${String(score).padStart(6,'0')}<br>HI&nbsp;&nbsp;&nbsp; ${String(G.best).padStart(6,'0')}<br>ROUND ${round}/3`,
+        btn: 'CONTINUE?' });
+    }, 900);
+  }
+
+  function drawBottle() {
+    const bx = W/2, by = H - 26;
+    ctx.save();
+    ctx.translate(bx, by);
+    ctx.shadowColor = NEON_PINK; ctx.shadowBlur = 12;
+    const grd = ctx.createLinearGradient(-15, -38, 15, 0);
+    grd.addColorStop(0, '#ff7ab8'); grd.addColorStop(1, '#e02be0');
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.moveTo(-15, -30);
+    ctx.quadraticCurveTo(-15, -38, -7, -38);
+    ctx.lineTo(7, -38);
+    ctx.quadraticCurveTo(15, -38, 15, -30);
+    ctx.lineTo(15, -4);
+    ctx.quadraticCurveTo(15, 0, 11, 0);
+    ctx.lineTo(-11, 0);
+    ctx.quadraticCurveTo(-15, 0, -15, -4);
+    ctx.closePath(); ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = 'rgba(255,255,255,.35)';
+    ctx.fillRect(-10, -34, 4, 28);
+    ctx.fillStyle = NEON_YELLOW;
+    ctx.fillRect(-6, -50, 12, 12);
+    ctx.beginPath(); ctx.arc(14, -46, 5, 0, Math.PI*2);
+    ctx.fillStyle = NEON_CYAN; ctx.fill();
+    ctx.strokeStyle = NEON_CYAN; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(6, -46); ctx.lineTo(9, -46); ctx.stroke();
+    ctx.restore();
+  }
+
+  function drawSprays(dt) {
+    sprays = sprays.filter(s => (s.life -= dt) > 0);
+    const ox = W/2, oy = H - 76;
+    for (const s of sprays) {
+      const a = 1 - s.life / .18;
+      ctx.fillStyle = `rgba(255,255,255,${(1 - a) * .5})`;
+      for (let i = 1; i <= 6; i++) {
+        const t = i / 6;
+        const x = ox + (s.x - ox) * t + (Math.random() - .5) * 14 * t;
+        const y = oy + (s.y - oy) * t + (Math.random() - .5) * 14 * t;
+        ctx.fillRect(x, y, 3, 3);
+      }
+      ctx.beginPath();
+      ctx.arc(s.x, s.y, 10 + a * 26, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255,255,255,${(1 - a) * .5})`;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+  }
+
+  function popBubble(b, x) {
+    bubbles.splice(bubbles.indexOf(b), 1);
+    if (b.kind === 'stink') {
+      combo = 0; flash = 1;
+      timeLeft = Math.max(0, timeLeft - 3);
+      sndStink();
+      burst(x, b.y, STINK.rim);
+      toast('EWW! -3s');
+      return;
+    }
+    score += b.pts; needLeft--; combo++;
+    burst(x, b.y, b.rim);
+    if (b.kind === 'gem') { sndCoin(); toast('+3 GEM!'); }
+    else sndPop();
+    if (combo > 0 && combo % 5 === 0) {
+      score += 5; sndClear(); toast('COMBO x' + combo + ' +5');
+    }
+    updateHUD();
+    if (needLeft <= 0) roundClear();
+  }
+
+  G.start = function() {
+    setHUD(['POPS', 'ROUND', 'SCORE']);
+    round = 1; score = 0; combo = 0; flash = 0;
+    resetFX();
+    setupRound(1);
+    state = S.PLAY;
+  };
+
+  G.tap = function(cx, cy) {
+    if (state !== S.PLAY) return;
+    if (cx === undefined) {
+      // keyboard: auto-aim the good bubble closest to escaping
+      let target = null;
+      for (const b of bubbles)
+        if (b.kind !== 'stink' && (!target || b.y < target.y)) target = b;
+      if (!target) return;
+      cx = bubbleX(target); cy = target.y;
+    }
+    sprays.push({ x: cx, y: cy, life: .18 });
+    let hit = null, hd = 1e9;
+    for (const b of bubbles) {
+      const d = Math.hypot(cx - bubbleX(b), cy - b.y);
+      if (d < b.r + 14 && d < hd) { hd = d; hit = b; }
+    }
+    if (hit) popBubble(hit, bubbleX(hit));
+    else { combo = 0; sndPuff(); }
+  };
+
+  G.frame = function(dt) {
+    time += dt;
+    flash = Math.max(0, flash - dt * 3);
+
+    if (state === S.PLAY) {
+      timeLeft -= dt;
+      const whole = Math.ceil(timeLeft);
+      if (whole !== lastWholeSec && whole <= 5 && whole > 0) { sndTick(); lastWholeSec = whole; }
+      if (timeLeft <= 0) { timeLeft = 0; die(); }
+      spawnT -= dt;
+      if (spawnT <= 0 && state === S.PLAY) {
+        spawnBubble();
+        spawnT = cfg().spawn * (.7 + Math.random() * .6);
+      }
+    }
+    if (state === S.PLAY || state === S.LEVELUP) {
+      for (const b of bubbles) b.y -= b.vy * dt;
+      bubbles = bubbles.filter(b => b.y > -b.r - 10);
+    }
+
+    drawArcadeBG(time);
+
+    for (const b of bubbles) {
+      const x = bubbleX(b);
+      ctx.beginPath(); ctx.arc(x, b.y, b.r, 0, Math.PI * 2);
+      ctx.fillStyle = b.kind === 'stink' ? 'rgba(84,227,86,.10)' : 'rgba(255,255,255,.06)';
+      ctx.fill();
+      ctx.strokeStyle = b.rim; ctx.lineWidth = 2;
+      ctx.shadowColor = b.rim; ctx.shadowBlur = 10;
+      ctx.stroke();
+      ctx.shadowBlur = 0;
+      ctx.beginPath(); ctx.arc(x - b.r*.35, b.y - b.r*.35, b.r*.16, 0, Math.PI*2);
+      ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.fill();
+      ctx.font = `${Math.round(b.r * 1.05)}px serif`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(b.emoji, x, b.y + 1);
+    }
+
+    drawBottle();
+    drawSprays(dt);
+    drawParticles(dt);
+    updateFireworks(dt);
+
+    if (state === S.PLAY || state === S.LEVELUP) {
+      const low = timeLeft <= 5;
+      ctx.font = `${low ? 22 : 16}px 'Press Start 2P', monospace`;
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = low ? '#ff3355' : NEON_CYAN;
+      ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 8;
+      ctx.fillText(Math.ceil(timeLeft), W/2, 96);
+      ctx.shadowBlur = 0;
+    }
+
+    if (flash > 0) {
+      ctx.fillStyle = `rgba(84,227,86,${flash * .3})`;
+      ctx.fillRect(0, 0, W, H);
+    }
+
+    if (state === S.PLAY) {
+      ctx.font = `9px 'Press Start 2P', monospace`;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = (Math.floor(time * 2) % 2) ? 'rgba(34,230,255,.7)' : 'rgba(34,230,255,.25)';
+      ctx.fillText('TAP THE BUBBLES', W/2, H - 24);
+    }
+  };
+
+  G.retry = G.start;
+  return G;
+})();
+
+// ============================================================
 //  MAIN LOOP + WIRING
 // ============================================================
 let lastT = 0, menuTime = 0;
@@ -1021,7 +1298,7 @@ requestAnimationFrame(frame);
 function onTap(e) {
   if (overlay.classList.contains('show')) return;
   e.preventDefault();
-  if (active) active.tap();
+  if (active) active.tap(e.clientX, e.clientY);
 }
 canvas.addEventListener('pointerdown', onTap);
 window.addEventListener('keydown', e => {
@@ -1030,6 +1307,7 @@ window.addEventListener('keydown', e => {
 
 document.getElementById('cart-lipstick').addEventListener('click', () => launch(GameLipstick));
 document.getElementById('cart-stack').addEventListener('click', () => launch(GameStack));
+document.getElementById('cart-perfume').addEventListener('click', () => launch(GamePerfume));
 
 $ovBtn.addEventListener('click', () => {
   if (!active) return;
