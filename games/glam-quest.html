@@ -418,7 +418,13 @@ const GameQuest = (() => {
 
   const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
   const sgn = v => v > 0 ? 1 : v < 0 ? -1 : 0;
-  const tile = () => Math.min(H / ROWS, W / 14);
+  // on touch devices reserve a strip below the world so fingers don't cover the action
+  const ctrlPad = () => {
+    if (!(touchUI || COARSE)) return 0;
+    const bs = clamp(Math.min(W, H) * .13, 52, 84);
+    return Math.min(76 + bs, H * .28);
+  };
+  const tile = () => Math.min((H - ctrlPad()) / ROWS, W / 14);
   const cell = (c, r) => (c >= 0 && c < cols && r >= 0 && r < ROWS) ? grid[r][c] : (c < 0 || c >= cols ? '#' : ' ');
   const solid = (c, r) => { const ch = cell(c, r); return ch === '#' || ch === 'B'; };
   const oneway = (c, r) => cell(c, r) === '=';
@@ -575,7 +581,7 @@ const GameQuest = (() => {
   function hOverlap(a, b) { return Math.abs(a.x - b.x) < (a.w + b.w) / 2; }
 
   function burstAt(wx, wy, color) {
-    const ts = tile(), offY = H - ROWS * ts;
+    const ts = tile(), offY = H - ctrlPad() - ROWS * ts;
     burst((wx - camX) * ts, offY + wy * ts, color || world.accent);
   }
 
@@ -1317,9 +1323,22 @@ const GameQuest = (() => {
 
   function draw(dt) {
     const ts = tile();
-    const offY = H - ROWS * ts;
+    const offY = H - ctrlPad() - ROWS * ts;
+    const groundY = offY + ROWS * ts;
     drawBG(ts, offY);
+    if (groundY < H - 1) {
+      // finger strip: dark band below the world, solid ground columns bleed into it
+      ctx.fillStyle = '#05030c';
+      ctx.fillRect(0, px(groundY), W, H - px(groundY) + 1);
+      ctx.fillStyle = world.ground;
+      const c0 = Math.max(0, Math.floor(camX)), c1 = Math.min(cols - 1, Math.ceil(camX + W / ts));
+      for (let c = c0; c <= c1; c++) {
+        if (grid[ROWS - 1][c] === '#')
+          ctx.fillRect(px((c - camX) * ts), px(groundY), px(ts) + 1, H - px(groundY));
+      }
+    }
     ctx.save();
+    ctx.beginPath(); ctx.rect(0, 0, W, groundY); ctx.clip();
     if (shake > 0) ctx.translate((Math.random() - .5) * shake * 14, (Math.random() - .5) * shake * 10);
     drawTiles(ts, offY);
     drawProps(ts, offY);
