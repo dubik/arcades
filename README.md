@@ -1,6 +1,6 @@
 # 🕹️ Glam Arcade
 
-A neon retro-arcade machine with five mini-games, built with Claude. No ads, no tracking, works on phones and computers.
+A neon retro-arcade machine with six mini-games, built with Claude. No ads, no tracking, works on phones and computers.
 
 ## ▶️ Play
 
@@ -13,6 +13,7 @@ A neon retro-arcade machine with five mini-games, built with Claude. No ads, no 
 - 🌸 **Perfume Pop** — spritz the rising scent bubbles before time runs out. Gems score triple, combos pay bonus — but don't pop the stinkers!
 - 💎 **Gem Crush** — bejeweled-style match-3. Swap gems, chain cascades, and forge flame, lightning and prism gems for explosive combos.
 - 🎯 **Glitter Darts** — tap to throw when the sweeping sparkle crosses the board. Hit each level's target score with 5 darts; endless levels with faster aim, a shrinking board, and drift.
+- 👑 **Glam Quest** — mario-style side scroller across 5 neon worlds. Run, double-jump and stomp stinkers; dodge spikies, perfume drones, hopping lipsticks, spikes and pits. Coyote time, jump buffering and variable jump height for that classic platformer feel. Arrows/WASD + Space, or touch buttons on phones.
 
 Standalone versions of each game are in [`games/`](games/).
 
