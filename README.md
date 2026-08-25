@@ -1,6 +1,6 @@
 # 🕹️ Glam Arcade
 
-A neon retro-arcade machine with six mini-games, built with Claude. No ads, no tracking, works on phones and computers.
+A neon retro-arcade machine with seven mini-games, built with Claude. No ads, no tracking, works on phones and computers.
 
 ## ▶️ Play
 
@@ -14,6 +14,8 @@ A neon retro-arcade machine with six mini-games, built with Claude. No ads, no t
 - 💎 **Gem Crush** — bejeweled-style match-3. Swap gems, chain cascades, and forge flame, lightning and prism gems for explosive combos.
 - 🎯 **Glitter Darts** — tap to throw when the sweeping sparkle crosses the board. Hit each level's target score with 5 darts; endless levels with faster aim, a shrinking board, and drift.
 - 👑 **Glam Quest** — mario-style side scroller across 5 neon worlds. Run, double-jump and stomp stinkers; dodge spikies, perfume drones, hopping lipsticks, spikes and pits. Coyote time, jump buffering and variable jump height for that classic platformer feel. Arrows/WASD + Space, or touch buttons on phones.
+
+- 🥁 **Drum Hero** — guitar-hero-style drumming. Notes fall down four lanes (hi-hat, snare, kick, tom); hit them on the line with D F J K (Space = kick) or by tapping the lanes. Procedurally generated beats start as simple kick patterns and grow into backbeats, eighth-note hats, syncopation, crashes and drum fills — every level faster and trickier. Synthesized drum kit (Web Audio): pitch-dropping kick, noise-wire snare, metallic 808 hats, toms and a real crash decay.
 
 Standalone versions of each game are in [`games/`](games/).
 
